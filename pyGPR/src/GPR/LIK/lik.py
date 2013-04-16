@@ -28,7 +28,7 @@ def likErf(hyp=None, y=None, mu=None, s2=None, inffunc=None, der=None, nargout=N
         s2zero = True; 
         if not s2 == None: 
             if np.linalg.norm(s2)>0:
-                 s2zero = False # s2==0 ?
+                s2zero = False # s2==0 ?
             #end
         #end         
         if s2zero:                                         # log probability evaluation
@@ -38,15 +38,15 @@ def likErf(hyp=None, y=None, mu=None, s2=None, inffunc=None, der=None, nargout=N
             p = np.exp(lp)
         #end
         if nargout>1:
-            ymu = 2*p-1                                                # first y moment
+            ymu = 2.*p-1                                                # first y moment
             if nargout>2:
-                ys2 = 4*p*(1-p)                                        # second y moment
-                varargout = [lp,ymu,ys2]
+                ys2 = 4.*p*(1.-p)                                        # second y moment
+                return [lp,ymu,ys2]
             else:
-                varargout = [lp,ymu]
+                return [lp,ymu]
             #end
         else:
-            varargout = lp
+            return lp
         #end
     else:                                                   # inference mode
         if inffunc == 'inf.infLaplace':
@@ -59,24 +59,24 @@ def likErf(hyp=None, y=None, mu=None, s2=None, inffunc=None, der=None, nargout=N
                     if nargout>2:                            # 2nd derivative of log likelihood
                         d2lp = -n_p**2 - yf*n_p
                         if nargout>3:                        # 3rd derivative of log likelihood
-                            d3lp = 2*y*n_p**3 + 3*f*n_p**2 + y*(f**2-1)*n_p 
-                            varargout = [lp,dlp,d2lp,d3lp]
+                            d3lp = 2.*y*n_p**3 + 3.*f*n_p**2 + y*(f**2-1.)*n_p 
+                            return [lp,dlp,d2lp,d3lp]
                         else:
-                            varargout = [lp,dlp,d2lp]
+                            return [lp,dlp,d2lp]
                         #end
                     else:
-                        varargout = [lp,dlp]
+                        return [lp,dlp]
                     #end
                 else:
-                    varargout = lp
+                    return lp
                 #end
-            else:                                              # derivative mode
-                varargout = nargout*[]                         # derivative w.r.t. hypers
+            else:                                         # derivative mode
+                return nargout*[]                         # derivative w.r.t. hypers
             #end
 
         if inffunc == 'inf.infEP':
             if der == None:                                            # no derivative mode
-                z = mu/np.sqrt(1+s2) 
+                z = mu/np.sqrt(1.+s2) 
                 [junk,lZ] = cumGauss(y,z,2)                            # log part function
                 if not y == None:
                      z = z*y
@@ -87,15 +87,15 @@ def likErf(hyp=None, y=None, mu=None, s2=None, inffunc=None, der=None, nargout=N
                     dlZ = y*n_p/np.sqrt(1.+s2)                      # 1st derivative wrt mean
                     if nargout>2:
                         d2lZ = -n_p*(z+n_p)/(1.+s2)                 # 2nd derivative wrt mean
-                        varargout = [lZ,dlZ,d2lZ]
+                        return [lZ,dlZ,d2lZ]
                     else:
-                        varargout = [lZ,dlZ]
+                        return [lZ,dlZ]
                     #end
                 else:
-                    varargout = lZ
+                    return lZ
                 #end
             else:                                                   # derivative mode
-                varargout = 0                                     # deriv. wrt hyp.lik
+                return []                                     # deriv. wrt hyp.lik
             #end
   
         if inffunc == 'inf.infVB':
@@ -106,13 +106,13 @@ def likErf(hyp=None, y=None, mu=None, s2=None, inffunc=None, der=None, nargout=N
                 c = -1.785873318175113;
                 ga = s2; n = len(ga); b = d*y*np.ones((n,1)); db = np.zeros((n,1)); d2b = db
                 h = -2.*c*np.ones((n,1)); h[ga>1] = np.inf; dh = np.zeros((n,1)); d2h = dh   
-                varargout = [h,b,dh,db,d2h,d2b]
+                return [h,b,dh,db,d2h,d2b]
             else:                                                  # derivative mode
-                varargout = []                                     # deriv. wrt hyp.lik
+                return []                                     # deriv. wrt hyp.lik
             #end
         #end
     #end
-    return varargout
+    raise Exception("Did not return a valid value in lik.likErf\n")
 
 def cumGauss(y=None,f=None,nargout=1):
     #function [p,lp] = cumGauss(y,f)

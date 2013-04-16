@@ -10,7 +10,7 @@ def min_wrapper(hyp, F, Flag, *varargin):
     x = convert_to_array(hyp) # Converts the hyperparameter class to an array
 
     if Flag == 'CG':
-        aa = cg(nlml, x, dnlml, (F,hyp,varargin), maxiter=100, disp=False, full_output=True)
+        aa = cg(nlml, x, dnlml, (F,hyp,varargin), maxiter=100, disp=True, full_output=True)
         x = aa[0]; fx = aa[1]; funcCalls = aa[2]; gradcalls = aa[3]
         if aa[4] == 1:
             print "Maximum number of iterations exceeded."
@@ -40,6 +40,7 @@ def nlml(x,F,*varargin):
     f = lambda z: F(z,*temp)
     X = convert_to_class(x,hyp)
     vargout = f(X)
+    print "nlml = ",vargout[0]
     return vargout[0]
 
 def dnlml(x,F,*varargin):
@@ -50,4 +51,5 @@ def dnlml(x,F,*varargin):
     X = convert_to_class(x,hyp)
     vargout = f(X)
     z = convert_to_array(vargout[1])
+    print "dnlml = ",z
     return z

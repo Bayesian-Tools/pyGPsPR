@@ -154,14 +154,14 @@ if __name__ == '__main__':
     S2i = np.array([[10.256410256410254,-9.743589743589741],[-9.743589743589741,10.256410256410254]])
     p2 = n2*np.exp( (-np.dot(tmm,S2i)*tmm/2).sum(axis=1) ) / np.sqrt(0.0975)
 
-    fig = plt.figure()
+    '''fig = plt.figure()
     plt.plot(x1[:,0], x1[:,1], 'b+', markersize = 12)
     plt.plot(x2[:,0], x2[:,1], 'r+', markersize = 12)
     pc = plt.contour(t1, t2, np.reshape(p2/(p1+p2), (t1.shape[0],t1.shape[1]) ))
     fig.colorbar(pc)
     plt.grid()
     plt.axis([-4, 4, -4, 4])
-    plt.show()
+    plt.show()'''
     
 
     meanfunc = [ ['means.meanConst'] ] 
@@ -171,15 +171,21 @@ if __name__ == '__main__':
 
     hyp = hyperParameters()
 
-    #hyp.mean = np.array([0.])
-    #hyp.cov  = np.array([-1.0,0.0,0.0])
-    #vargout = min_wrapper(hyp,gp,'CG',inffunc,meanfunc,covfunc,likfunc,x,y,None,None,True)
-    #hyp = vargout[0]
-
+    hyp.mean = np.array([0.])
+    hyp.cov  = np.array([0.0,0.0,0.0])
     hyp.mean = np.array([-2.842117459073954])
     hyp.cov  = np.array([0.051885508906388,0.170633324977413,1.218386482861781])
-
-    vargout = gp(hyp, inffunc, meanfunc, covfunc, likfunc, x, y, t, np.ones((n,1)) )
+    vargout = min_wrapper(hyp,gp,'BFGS',inffunc,meanfunc,covfunc,likfunc,x,y,None,None,True)
+    hyp = vargout[0]
+    
+    print hyp.mean
+    print hyp.cov
+    hyp.mean = np.array([-2.842117459073954])
+    hyp.cov  = np.array([0.051885508906388,0.170633324977413,1.218386482861781])
+    print hyp.mean
+    print hyp.cov
+    
+    '''vargout = gp(hyp, inffunc, meanfunc, covfunc, likfunc, x, y, t, np.ones((n,1)) )
     a = vargout[0]; b = vargout[1]; c = vargout[2]; d = vargout[3]; lp = vargout[4]
 
     fig = plt.figure()
@@ -209,5 +215,5 @@ if __name__ == '__main__':
     fig.colorbar(pc)
     plt.grid()
     plt.axis([-4, 4, -4, 4])
-    plt.show()
+    plt.show()'''
     

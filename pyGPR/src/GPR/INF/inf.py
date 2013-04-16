@@ -98,39 +98,40 @@ def infLaplace(hyp, meanfunc, covfunc, likfunc, x, y,nargout=1):
         nlZ = np.dot(alpha.T,(f-m))/2. + (np.log(np.diag(post.L))-lp).sum()
         nlZ = nlZ[0]
     #end
-    if nargout>2:                                           # do we want derivatives?
-        dnlZ = deepcopy(hyp)                                # allocate space for derivatives
-        if isWneg:                  # switch between Cholesky and LU decomposition mode
-            Z = -post.L                                                 # inv(K+inv(W))
-            g = (iA*K).sum(axis=1)/2; # deriv. of ln|B| wrt W; g = diag(inv(inv(K)+diag(W)))/2
+    if nargout>1:
+        if nargout>2:                                           # do we want derivatives?
+            dnlZ = deepcopy(hyp)                                # allocate space for derivatives
+            if isWneg:                  # switch between Cholesky and LU decomposition mode
+                Z = -post.L                                                 # inv(K+inv(W))
+                g = (iA*K).sum(axis=1)/2; # deriv. of ln|B| wrt W; g = diag(inv(inv(K)+diag(W)))/2
+            else:
+                Z = np.tile(sW,(1,n))*solve_chol(post.L,np.diag(sW)) #sW*inv(B)*sW=inv(K+inv(W))
+                C = np.linalg.solve(post.L.T,np.tile(sW,(1,n))*K)                     # deriv. of ln|B| wrt W
+                g = (np.diag(K)-(C**2).sum(axis=0).T)/2.                    # g = diag(inv(inv(K)+W))/2
+            #end
+            dfhat = g*d3lp  # deriv. of nlZ wrt. fhat: dfhat=diag(inv(inv(K)+W)).*d3lp/2
+            for ii in range(len(hyp.cov)):                                  # covariance hypers
+                dK = Tools.general.feval(covfunc, hyp.cov, x, None, ii)
+                dnlZ.cov[ii] = (Z*dK).sum()/2. - np.dot(alpha.T,np.dot(dK,alpha))/2.         # explicit part
+                b = np.dot(dK,dlp)                            # b-K*(Z*b) = inv(eye(n)+K*diag(W))*b
+                dnlZ.cov[ii] -= np.dot(dfhat.T,b-np.dot(K,np.dot(Z,b)))            # implicit part
+            #end
+            for ii in range(len(hyp.lik)):                  # likelihood hypers
+                [lp_dhyp,dlp_dhyp,d2lp_dhyp] = Tools.general.feval(likfunc,hyp.lik,y,f,None,inffunc,ii,3)
+                dnlZ.lik[ii] = -np.dot(g.T,d2lp_dhyp) - lp_dhyp.sum()      # explicit part
+                b = np.dot(K,dlp_dhyp)                        # b-K*(Z*b) = inv(eye(n)+K*diag(W))*b
+                dnlZ.lik[ii] -= np.dot(dfhat.T,b-np.dot(K,np.dot(Z,b)))   # implicit part
+            #end
+            for ii in range(len(hyp.mean)):                  # mean hypers
+                dm = Tools.general.feval(meanfunc, hyp.mean, x, ii)
+                dnlZ.mean[ii] = -np.dot(alpha.T,dm)                # explicit part
+                dnlZ.mean[ii] -= np.dot(dfhat.T,dm-np.dot(K,np.dot(Z,dm))) # implicit part
+            #end
+            return [post,nlZ[0],dnlZ]
         else:
-            Z = np.tile(sW,(1,n))*solve_chol(post.L,np.diag(sW)) #sW*inv(B)*sW=inv(K+inv(W))
-            C = np.linalg.solve(post.L.T,np.tile(sW,(1,n))*K)                     # deriv. of ln|B| wrt W
-            g = (np.diag(K)-(C**2).sum(axis=0).T)/2.                    # g = diag(inv(inv(K)+W))/2
-        #end
-        dfhat = g*d3lp  # deriv. of nlZ wrt. fhat: dfhat=diag(inv(inv(K)+W)).*d3lp/2
-        for ii in range(len(hyp.cov)):                                  # covariance hypers
-            dK = Tools.general.feval(covfunc, hyp.cov, x, None, ii)
-            dnlZ.cov[ii] = (Z*dK).sum()/2. - np.dot(alpha.T,np.dot(dK,alpha))/2.         # explicit part
-            b = np.dot(dK,dlp)                            # b-K*(Z*b) = inv(eye(n)+K*diag(W))*b
-            dnlZ.cov[ii] -= np.dot(dfhat.T,b-np.dot(K,np.dot(Z,b)))            # implicit part
-        #end
-        for ii in range(len(hyp.lik)):                  # likelihood hypers
-            [lp_dhyp,dlp_dhyp,d2lp_dhyp] = Tools.general.feval(likfunc,hyp.lik,y,f,None,inffunc,ii,3)
-            dnlZ.lik[ii] = -np.dot(g.T,d2lp_dhyp) - lp_dhyp.sum()      # explicit part
-            b = np.dot(K,dlp_dhyp)                        # b-K*(Z*b) = inv(eye(n)+K*diag(W))*b
-            dnlZ.lik[ii] -= np.dot(dfhat.T,b-np.dot(K,np.dot(Z,b)))   # implicit part
-        #end
-        for ii in range(len(hyp.mean)):                  # mean hypers
-            dm = Tools.general.feval(meanfunc, hyp.mean, x, ii)
-            dnlZ.mean[ii] = -np.dot(alpha.T,dm)                # explicit part
-            dnlZ.mean[ii] -= np.dot(dfhat.T,dm-np.dot(K,np.dot(Z,dm))) # implicit part
-        #end
-        vargout = [post,nlZ[0],dnlZ]
-    else:
-        vargout = [post, nlZ[0]]
+            return [post, nlZ[0]]
     #end
-    return vargout
+    return [post]
 
 # criterion Psi at alpha + s*dalpha for line search
 def Psi_line(s,dalpha,alpha,hyp,K,m,likfunc,y,inffunc):
@@ -302,56 +303,57 @@ def infFITC_Laplace(hyp, meanfunc, covfunc, likfunc, x, y,nargout=1):
     RV = np.dot(chol_inv(A),V); RVdd = RV*np.tile((W*dd).T,(nu,1))     # RVdd needed for dnlZ
     B = np.dot(B,RV.T); post.L += np.dot(B,B.T)
 
-    if nargout>2:                                           # do we want derivatives?
-        dnlZ = deepcopy(hyp)                                   # allocate space for derivatives
-        [d,P,R] = fitcRefresh(d0,Ku,R0,V,W)               # g = diag(inv(inv(K)+W))/2
-        g = d/2 + 0.5*(np.dot(np.dot(R,R0),P)**2).sum(axis=0).T
-        t = W/(1+W*d0)
+    if nargout>1:
+        if nargout>2:                                           # do we want derivatives?
+            dnlZ = deepcopy(hyp)                                   # allocate space for derivatives
+            [d,P,R] = fitcRefresh(d0,Ku,R0,V,W)               # g = diag(inv(inv(K)+W))/2
+            g = d/2 + 0.5*(np.dot(np.dot(R,R0),P)**2).sum(axis=0).T
+            t = W/(1+W*d0)
 
-        dfhat = g*d3lp  # deriv. of nlZ wrt. fhat: dfhat=diag(inv(inv(K)+W)).*d3lp/2
-        for ii in range(len(hyp.cov)):                                  # covariance hypers
-            ddiagK,dKuu,dKu = Tools.general.feval(covfunc, hyp.cov, x, None, ii) # eval cov derivatives
-            dA = 2.*dKu.T-np.dot(R0tV.T,dKuu)                                       # dQ = dA*R0tV
-            w = (dA*R0tV.T).sum(axis=1); v = ddiagK-w   # w = diag(dQ); v = diag(dK)-diag(dQ);
-            dnlZ.cov[ii] = np.dot(ddiagK.T,t) - np.dot((RVdd*RVdd).sum(axis=0),v)  # explicit part
-            dnlZ.cov[ii] -= (np.dot(RVdd,dA)*np.dot(RVdd,R0tV.T)).sum() # explicit part
-            dnlZ.cov[ii] = 0.5*dnlZ.cov[ii] - np.dot(alpha.T,np.dot(dA,np.dot(R0tV,alpha)+v*alpha))/2.  # explicit
-            b = np.dot(dA,np.dot(R0tV,dlp)) + v*dlp            # b-K*(Z*b) = inv(eye(n)+K*diag(W))*b
-            KZb = mvmK(mvmZ(b,RVdd,t),V,d0)
-            dnlZ.cov[ii] -= np.dot(dfhat.T,(b-KZb))                # implicit part
-        #end
-        for ii in range(len(hyp.lik)):                                   # likelihood hypers
-            vargout = Tools.general.feval(likfunc,hyp.lik,y,f,None,inffunc,ii,3)
-            lp_dhyp = vargout[0]; dlp_dhyp = vargout[1]; d2lp_dhyp = vargout[2] 
-            dnlZ.lik[ii] = -np.dot(g.T,d2lp_dhyp) - lp_dhyp.sum()        # explicit part
-            b = mvmK(dlp_dhyp,V,d0)                                     # implicit part
-            dnlZ.lik[ii] -= np.dot(dfhat.T,b-mvmK(mvmZ(b,RVdd,t),V,d0))
-            if ii == len(hyp.lik):
-                # since snu2 is a fixed fraction of sn2, there is a covariance-like term
-                # in the derivative as well
-                snu = np.sqrt(snu2);
-                T = chol_inv(Kuu + snu2*np.eye(nu)); 
-                T = np.dot(T.T,np.dot(T,snu*Ku)); 
-                t = np.array([(T*T).sum(axis=0)]).T 
-                z = np.dot(alpha.T,np.dot(T.T,np.dot(T,alpha)-t*alpha)) - np.dot(np.array([(RVdd*RVdd).sum(axis=0)]),t)
-                z += (np.dot(RVdd,T.T)**2).sum()
-                b = (t*dlp-np.dot(T.T,np.dot(T,dlp)))/2.
+            dfhat = g*d3lp  # deriv. of nlZ wrt. fhat: dfhat=diag(inv(inv(K)+W)).*d3lp/2
+            for ii in range(len(hyp.cov)):                                  # covariance hypers
+                ddiagK,dKuu,dKu = Tools.general.feval(covfunc, hyp.cov, x, None, ii) # eval cov derivatives
+                dA = 2.*dKu.T-np.dot(R0tV.T,dKuu)                                       # dQ = dA*R0tV
+                w = (dA*R0tV.T).sum(axis=1); v = ddiagK-w   # w = diag(dQ); v = diag(dK)-diag(dQ);
+                dnlZ.cov[ii] = np.dot(ddiagK.T,t) - np.dot((RVdd*RVdd).sum(axis=0),v)  # explicit part
+                dnlZ.cov[ii] -= (np.dot(RVdd,dA)*np.dot(RVdd,R0tV.T)).sum() # explicit part
+                dnlZ.cov[ii] = 0.5*dnlZ.cov[ii] - np.dot(alpha.T,np.dot(dA,np.dot(R0tV,alpha)+v*alpha))/2.  # explicit
+                b = np.dot(dA,np.dot(R0tV,dlp)) + v*dlp            # b-K*(Z*b) = inv(eye(n)+K*diag(W))*b
                 KZb = mvmK(mvmZ(b,RVdd,t),V,d0)
-                z -= np.dot(dfhat.T,b-KZb)
-                dnlZ.lik[ii] += z
+                dnlZ.cov[ii] -= np.dot(dfhat.T,(b-KZb))                # implicit part
             #end
-        #end
-        for ii in range(len(hyp.mean)):                                  # mean hypers
-            dm = Tools.general.feval(meanfunc, hyp.mean, x, ii)
-            dnlZ.mean[ii] = -np.dot(alpha.T,dm)                          # explicit part
-            Zdm = mvmZ(dm,RVdd,t)
-            dnlZ.mean[ii] -= np.dot(dfhat.T,(dm-mvmK(Zdm,V,d0)))    # implicit part
-        #end
-        vargout = [post,nlZ,dnlZ]
-    else:
-        vargout = [post, nlZ]
+            for ii in range(len(hyp.lik)):                                   # likelihood hypers
+                vargout = Tools.general.feval(likfunc,hyp.lik,y,f,None,inffunc,ii,3)
+                lp_dhyp = vargout[0]; dlp_dhyp = vargout[1]; d2lp_dhyp = vargout[2] 
+                dnlZ.lik[ii] = -np.dot(g.T,d2lp_dhyp) - lp_dhyp.sum()        # explicit part
+                b = mvmK(dlp_dhyp,V,d0)                                     # implicit part
+                dnlZ.lik[ii] -= np.dot(dfhat.T,b-mvmK(mvmZ(b,RVdd,t),V,d0))
+                if ii == len(hyp.lik):
+                    # since snu2 is a fixed fraction of sn2, there is a covariance-like term
+                    # in the derivative as well
+                    snu = np.sqrt(snu2);
+                    T = chol_inv(Kuu + snu2*np.eye(nu)); 
+                    T = np.dot(T.T,np.dot(T,snu*Ku)); 
+                    t = np.array([(T*T).sum(axis=0)]).T 
+                    z = np.dot(alpha.T,np.dot(T.T,np.dot(T,alpha)-t*alpha)) - np.dot(np.array([(RVdd*RVdd).sum(axis=0)]),t)
+                    z += (np.dot(RVdd,T.T)**2).sum()
+                    b = (t*dlp-np.dot(T.T,np.dot(T,dlp)))/2.
+                    KZb = mvmK(mvmZ(b,RVdd,t),V,d0)
+                    z -= np.dot(dfhat.T,b-KZb)
+                    dnlZ.lik[ii] += z
+                #end
+            #end
+            for ii in range(len(hyp.mean)):                                  # mean hypers
+                dm = Tools.general.feval(meanfunc, hyp.mean, x, ii)
+                dnlZ.mean[ii] = -np.dot(alpha.T,dm)                          # explicit part
+                Zdm = mvmZ(dm,RVdd,t)
+                dnlZ.mean[ii] -= np.dot(dfhat.T,(dm-mvmK(Zdm,V,d0)))    # implicit part
+            #end
+            return [post,nlZ,dnlZ]
+        else:
+            return [post, nlZ]
     #end
-    return vargout
+    return [post]
 
     # matrix vector multiplication with Z=inv(K+inv(W))
 def mvmZ(x,RVdd,t):
@@ -478,7 +480,7 @@ def infFITC_EP(hyp, meanfunc, covfunc, likfunc, x, y, nargout=1):
     nlZ_old = np.inf; sweep = 0               # converged, max. sweeps or min. sweeps?
     while (np.abs(nlZ-nlZ_old) > tol and sweep < max_sweep) or (sweep < min_sweep):
         nlZ_old = nlZ; sweep += 1
-        rperm = range(n)#randperm(n)
+        rperm = randperm(n)
         for ii in rperm:       # iterate EP updates (in random order) over examples
             p_i = np.reshape(P[:,ii],(P.shape[0],1)); t = np.dot(R,np.dot(R0,p_i)) # temporary variables
             sigma_i = d[ii] + np.dot(t.T,t); mu_i = nn[ii] + np.dot(p_i.T,gg) # post moments O(nu^2)    
@@ -513,38 +515,39 @@ def infFITC_EP(hyp, meanfunc, covfunc, likfunc, x, y, nargout=1):
     B = R0tV*np.tile(dd.T,(nu,1)); L = np.dot(B,R0tV.T); B = np.dot(B,RV.T)
     post.L = np.dot(B,B.T) - L            # L = -R0'*V*inv(Kt+diag(1./ttau))*V'*R0
 
-    if nargout>2:                                           # do we want derivatives?
-        dnlZ = deepcopy(hyp)                               # allocate space for derivatives
-        RVdd = RV*np.tile(dd.T,(nu,1))
-        for ii in range(len(hyp.cov)):
-            ddiagK,dKuu,dKu = Tools.general.feval(covfunc, hyp.cov, x, None, jj)
-            dA = 2*dKu.T - np.dot(R0tV.T,dKuu)                                       # dQ = dA*R0tV
-            w = (dA*R0tV.T).sum(axis=1); v = ddiagK - w   # w = diag(dQ); v = diag(dK)-diag(dQ);
-            z = np.dot(dd.T,(v+w)) - (RVdd*RVdd).sum(axis=0)*v - ((RVdd*dA).T * np.dot(R0tV,RVdd.T)).sum()
-            dnlZ.cov[ii] = (z - np.dot(alpha.T,(alpha*v)) - np.dot(np.dot(alpha.T,dA),np.dot(R0tV,alpha)))/2.
-        #end
-        for ii in range(len(hyp.lik)):  # likelihood hypers
-            dlik = Tools.general.feval(likfunc, hyp.lik, y, nu_n/tau_n+m, 1/tau_n, inffunc, ii, 1)
-            dnlZ.lik[ii] = -dlik.sum()                                 
-            if ii == len(hyp.lik):
-                # since snu2 is a fixed fraction of sn2, there is a covariance-like term
-                # in the derivative as well
-                v = (R0tV*R0tV).sum(axis=0).T
-                z = (np.dot(RVdd,R0tV.T)**2).sum()  - np.dot((RVdd*RVdd).sum(axis=0),v)
-                z = z + np.dot(post.alpha.T,post.alpha) - np.dot(alpha.T,(v*alpha))
-                dnlZ.lik[ii] += snu2*z;
+    if nargout>1:
+        if nargout>2:                                           # do we want derivatives?
+            dnlZ = deepcopy(hyp)                               # allocate space for derivatives
+            RVdd = RV*np.tile(dd.T,(nu,1))
+            for ii in range(len(hyp.cov)):
+                ddiagK,dKuu,dKu = Tools.general.feval(covfunc, hyp.cov, x, None, jj)
+                dA = 2*dKu.T - np.dot(R0tV.T,dKuu)                                       # dQ = dA*R0tV
+                w = (dA*R0tV.T).sum(axis=1); v = ddiagK - w   # w = diag(dQ); v = diag(dK)-diag(dQ);
+                z = np.dot(dd.T,(v+w)) - (RVdd*RVdd).sum(axis=0)*v - ((RVdd*dA).T * np.dot(R0tV,RVdd.T)).sum()
+                dnlZ.cov[ii] = (z - np.dot(alpha.T,(alpha*v)) - np.dot(np.dot(alpha.T,dA),np.dot(R0tV,alpha)))/2.
             #end
-        #end
-        [junk,dlZ] = Tools.general.feval(likfunc, hyp.lik, y, nu_n/tau_n, 1/tau_n, inffunc, None, 2) # mean hyps
-        for ii in range(len(hyp.mean)):
-            dm = Tools.general.feval(meanfunc, hyp.mean, x, ii)
-            dnlZ.mean[ii] = -np.dot(dlZ.T,dm)
-        #end
-        vargout = [post, nlZ, dnlZ]
-    else:
-        vargout = [post, nlZ]
+            for ii in range(len(hyp.lik)):  # likelihood hypers
+                dlik = Tools.general.feval(likfunc, hyp.lik, y, nu_n/tau_n+m, 1/tau_n, inffunc, ii, 1)
+                dnlZ.lik[ii] = -dlik.sum()                                 
+                if ii == len(hyp.lik):
+                    # since snu2 is a fixed fraction of sn2, there is a covariance-like term
+                    # in the derivative as well
+                    v = (R0tV*R0tV).sum(axis=0).T
+                    z = (np.dot(RVdd,R0tV.T)**2).sum()  - np.dot((RVdd*RVdd).sum(axis=0),v)
+                    z = z + np.dot(post.alpha.T,post.alpha) - np.dot(alpha.T,(v*alpha))
+                    dnlZ.lik[ii] += snu2*z;
+                #end
+            #end
+            [junk,dlZ] = Tools.general.feval(likfunc, hyp.lik, y, nu_n/tau_n, 1/tau_n, inffunc, None, 2) # mean hyps
+            for ii in range(len(hyp.mean)):
+                dm = Tools.general.feval(meanfunc, hyp.mean, x, ii)
+                dnlZ.mean[ii] = -np.dot(dlZ.T,dm)
+            #end
+            return [post, nlZ, dnlZ]
+        else:
+            return [post, nlZ]
     #end
-    return vargout
+    return [post]
 
 # refresh the representation of the posterior from initial and site parameters
 # to prevent possible loss of numerical precision after many epfitcUpdates
@@ -638,7 +641,7 @@ def infEP(hyp, meanfunc, covfunc, likfunc, x, y, nargout=1):
     # for a vector of cavity parameters.
 
     # marginal likelihood for ttau = tnu = zeros(n,1); equals n*log(2) for likCum*
-    nlZ0 = -Tools.general.feval(likfunc,hyp.lik,y,m,np.reshape(np.diag(K),(np.diag(K).shape[0],1)),inffunc,None,1).sum()
+    nlZ0 = -1.*Tools.general.feval(likfunc,hyp.lik,y,m,np.reshape(np.diag(K),(np.diag(K).shape[0],1)),inffunc,None,1).sum()
 
     if "last_ttau" not in infEP.__dict__:   # find starting point for tilde parameters
         ttau  = np.zeros((n,1))             # initialize to zero if we have no better guess
@@ -662,7 +665,7 @@ def infEP(hyp, meanfunc, covfunc, likfunc, x, y, nargout=1):
     nlZ_old = np.inf; sweep = 0               # converged, max. sweeps or min. sweeps?
     while (np.abs(nlZ-nlZ_old) > tol and sweep < max_sweep) or (sweep < min_sweep):
         nlZ_old = nlZ; sweep += 1
-        rperm = range(n)#randperm(n)
+        rperm = randperm(n)
         for ii in rperm:       # iterate EP updates (in random order) over examples
             tau_ni = 1/Sigma[ii,ii] - ttau[ii]      #  first find the cavity distribution ..
             nu_ni  = mu[ii]/Sigma[ii,ii] + m[ii]*tau_ni - tnu[ii]    # .. params tau_ni and nu_ni
@@ -706,8 +709,8 @@ def infEP(hyp, meanfunc, covfunc, likfunc, x, y, nargout=1):
             Sigma = K - np.dot(V.T,V)
             mu = np.dot(Sigma,tnu)
             Dsigma = np.reshape(np.diag(Sigma),(np.diag(Sigma).shape[0],1))
-            tau_n = 1/Dsigma-ttau                    # compute the log marginal likelihood
-            nu_n  = mu/Dsigma-tnu                    # vectors of cavity parameters
+            tau_n = 1./Dsigma-ttau                    # compute the log marginal likelihood
+            nu_n  = mu/Dsigma-tnu + m*tau_n                    # vectors of cavity parameters
             F = np.dot(alpha,alpha.T) - np.tile(sW,(1,n))* \
                 solve_chol(L,np.diag(np.reshape(sW,(sW.shape[0],))))   # covariance hypers
             for ii in range(len(hyp.cov)):
@@ -723,13 +726,11 @@ def infEP(hyp, meanfunc, covfunc, likfunc, x, y, nargout=1):
                 dm = Tools.general.feval(meanfunc, hyp.mean, x, ii)
                 dnlZ.mean[ii] = -np.dot(dlZ.T,dm)
             #end
-            vargout = [post, nlZ, dnlZ]
+            return [post, nlZ[0], dnlZ]
         else:
-            vargout = [post, nlZ]
-    else:
-        vargout = [post]
+            return [post, nlZ[0]]
     #end
-    return vargout
+    return [post]
 
 # functions to compute the parameters of the Gaussian approximation, Sigma and
 # mu, and the negative log marginal likelihood, nlZ, from the current site
@@ -746,12 +747,12 @@ def epComputeParams(K, y, ttau, tnu, likfunc, hyp, m, inffunc):
 
     Dsigma = np.reshape(np.diag(Sigma),(np.diag(Sigma).shape[0],1)) 
 
-    tau_n = 1/Dsigma - ttau # compute the log marginal likelihood
-    nu_n  = mu/Dsigma-tnu + m*tau_n       # vectors of cavity parameters
-    lZ    = Tools.general.feval(likfunc, hyp.lik, y, nu_n/tau_n, 1/tau_n, inffunc)
+    tau_n = 1./Dsigma - ttau # compute the log marginal likelihood
+    nu_n  = mu/Dsigma-tnu - tnu + m*tau_n       # vectors of cavity parameters
+    lZ    = Tools.general.feval(likfunc, hyp.lik, y, nu_n/tau_n, 1./tau_n, inffunc, None, 1)
 
     nlZ   = np.log(np.diag(L)).sum() - lZ.sum() - np.dot(tnu.T,np.dot(Sigma,tnu))/2  \
-            - np.dot((nu_n-m*tau_n).T,((ttau/tau_n*(nu_n-m*tau_n)-2*tnu) / (ttau+tau_n)))/2 \
+            - np.dot((nu_n-m*tau_n).T,( (ttau/tau_n*(nu_n-m*tau_n)-2*tnu) / (ttau+tau_n) ))/2. \
             + (tnu**2/(tau_n+ttau)).sum()/2.- np.log(1.+ttau/tau_n).sum()/2.
     return Sigma, mu, nlZ[0], L
 
@@ -873,7 +874,7 @@ def infFITC(hyp, meanfunc, covfunc, likfunc, x, y, nargout=1):
             for ii in range(len(hyp.mean)):
                 dnlZ.mean[ii] = np.dot(-Tools.general.feval(meanfunc, hyp.mean, x, ii).T,*al)
             #end
-        return [post, nlZ[0], dnlZ]
+            return [post, nlZ[0], dnlZ]
         #end
         return [post, nlZ[0]]
     #end
