@@ -2,7 +2,7 @@ import numpy as np
 from copy import deepcopy
 from scipy.optimize import fmin_bfgs as bfgs
 from scipy.optimize import fmin_cg as cg
-
+from scg import scg
 from GPR.UTIL.utils import convert_to_array, convert_to_class
 
 def min_wrapper(hyp, F, Flag, *varargin):
@@ -29,6 +29,14 @@ def min_wrapper(hyp, F, Flag, *varargin):
             print "Gradient and/or function calls not changing."
         return convert_to_class(x,hyp), fvals, gvals, funcCalls
 
+    elif Flag == 'SCG':
+        # Use SCG
+        aa = scg(x, nlml, dnlml, (F,hyp,varargin),niters=40)
+        x = aa[0];
+        fvals = aa[1]
+        gvals = dnlml(x,F,hyp,varargin)
+        return convert_to_class(x,hyp), fvals, gvals
+
     else:
         raise Exception('Incorrect usage of optimization flag in min_wrapper')
 
@@ -40,7 +48,6 @@ def nlml(x,F,*varargin):
     f = lambda z: F(z,*temp)
     X = convert_to_class(x,hyp)
     vargout = f(X)
-    print "nlml = ",vargout[0]
     return vargout[0]
 
 def dnlml(x,F,*varargin):
@@ -51,5 +58,4 @@ def dnlml(x,F,*varargin):
     X = convert_to_class(x,hyp)
     vargout = f(X)
     z = convert_to_array(vargout[1])
-    print "dnlml = ",z
     return z

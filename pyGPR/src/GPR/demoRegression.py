@@ -62,7 +62,7 @@ if __name__ == '__main__':
 
     hyp2.cov = np.array([-1.0,0.0])
     hyp2.lik = np.array([np.log(0.1)])
-    vargout = min_wrapper(hyp2,gp,'CG',inffunc,[],covfunc,likfunc,x,y,None,None,True)
+    vargout = min_wrapper(hyp2,gp,'SCG',inffunc,[],covfunc,likfunc,x,y,None,None,True)
     hyp2 = vargout[0]
     #hyp2.cov = np.array([-0.993396880620537,0.685943441677086])
     #hyp2.lik = np.array([-1.902546786026883])

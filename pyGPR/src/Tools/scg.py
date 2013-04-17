@@ -105,7 +105,7 @@ def scg(x, f, gradf, args, niters = 100, gradcheck = False, display = 0, flog = 
         if (success == 1):
             mu = np.dot(d, gradnew)
             if (mu >= 0):
-                d = - gradnew
+                d = -1.* gradnew
                 mu = np.dot(d, gradnew)
 
             kappa = np.dot(d, d)
@@ -129,7 +129,7 @@ def scg(x, f, gradf, args, niters = 100, gradcheck = False, display = 0, flog = 
             delta = beta*kappa
             beta = beta - theta/kappa
 
-        alpha = - mu/delta
+        alpha = -1.* mu/delta
          
         # Calculate the comparison ratio.
         xnew = x + alpha*d
@@ -182,7 +182,7 @@ def scg(x, f, gradf, args, niters = 100, gradcheck = False, display = 0, flog = 
                 gradnew = gradf(x, *args)
                 gradCount += 1
                 # If the gradient is zero then we are done.
-                if (np.dot(gradnew, gradnew) == 0):
+                if (np.dot(gradnew, gradnew) == 0.):
 #                    print "FNEW: " , fnew
                     #options(8) = fnew;
                     if eval is not None:
@@ -199,7 +199,7 @@ def scg(x, f, gradf, args, niters = 100, gradcheck = False, display = 0, flog = 
         # Update search direction using Polak-Ribiere formula, or re-start
         # in direction of negative gradient after nparams steps.
         if (nsuccess == nparams):
-            d = -gradnew;
+            d = -1.*gradnew;
             nsuccess = 0;
         else:
             if (success == 1):
